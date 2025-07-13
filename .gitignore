@@ -37,24 +37,23 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Project Specific
-images/
-processed_images/
-exports/
-models/
-*.jpg
-*.jpeg
-*.png
-*.pdf
-sample_receipt.*
-test_receipt.*
-
-# Sensitive Data
-config_local.py
-.env
+# Project Specific - Temporary and Generated Files
+temp/
+data/processed_images/
+data/test_outputs/
+exports/*.csv
+exports/*.json
 *.log
 
-# Temporary files
-temp/
-tmp/
-cache/
+# Sensitive Configuration
+src/config_local.py
+.env
+
+# Large Files (use Git LFS if needed)
+*.zip
+*.tar.gz
+data/sample_receipts/*.jpg
+data/sample_receipts/*.jpeg
+data/sample_receipts/*.png
+models/saved_models/*.pkl
+models/saved_models/*.joblib
