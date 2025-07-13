@@ -147,7 +147,7 @@ if __name__ == "__main__":
     preprocessor = ImagePreprocessor()
     
     try:
-        result = preprocessor.smart_preprocess("../data/sample_receipts/sample_receipt_2.webp")
+        result = preprocessor.smart_preprocess("../data/sample_receipts/sample_receipt.jpeg")
         print("Smart preprocessing completed!")
         
     except Exception as e:
