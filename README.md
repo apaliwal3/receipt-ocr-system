@@ -6,7 +6,7 @@ Automated receipt text extraction and expense categorization system.
 
 1. Install Tesseract OCR
 2. Install Python dependencies: `pip install -r requirements.txt`
-3. Run tests: `python test_ocr.py`
+3. Run preprocessor and parser: `python3 ../src/main.py`
 
 ## Status
 
