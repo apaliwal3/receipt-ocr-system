@@ -108,69 +108,102 @@ class ReceiptPreprocessor:
         return text
     
     def _fix_minimal_errors(self, text: str) -> str:
+        # Fix specific price formatting issues
         text = text.replace('-£0,50', '-£0.50')
         text = text.replace('£0,50', '£0.50')
+        # Fix double negative in prices like -£-1.00 -> -£1.00
         text = re.sub(r'-£-(\d)', r'-£\1', text)
         return text
 
     def _fix_character_errors(self, text: str) -> str:
+        # Fix common OCR character misreads in numbers
+        # O/o mistaken for 0 in numbers
         text = re.sub(r'(\d)[Oo](\d)', r'\g<1>0\g<2>', text)
+        # I/l mistaken for 1 in numbers
         text = re.sub(r'(\d)[Il](\d)', r'\g<1>1\g<2>', text)
+        # Fix currency symbols followed by O/I
         text = re.sub(r'([£$€])[Oo](\d)', r'\g<1>0\g<2>', text)
         text = re.sub(r'([£$€])[Il](\d)', r'\g<1>1\g<2>', text)
-        text = re.sub(r'(\d),(\d{2})', r'\1.\2', text)
+        # Fix comma instead of decimal point in currency
+        text = re.sub(r'([£$€])(\d+),(\d{2})(?!\d)', r'\1\2.\3', text)
+        # Fix standalone price amounts with commas
+        text = re.sub(r'(\d+),(\d{2})(?=\s|$)', r'\1.\2', text)
         return text
 
     def _remove_artifact_characters(self, text: str) -> str:
-        text = re.sub(r'(\d\.\d{2})\s*[a-zA-Z]\s+([A-Z])', r'\1 \2', text)
-        text = re.sub(r'\s+[a-zA-Z]\s+([£$€]?\d)', r' \1', text)
-        text = re.sub(r'([a-zA-Z]{3,})\s*[a-zA-Z]\s+', r'\1 ', text)
-        text = re.sub(r'\s+[,\.\-\+\*]\s+', ' ', text)
+        # Remove single characters that appear between meaningful content
+        # But be much more conservative to avoid removing valid word endings
+        
+        # Remove isolated single characters between price and next word
+        # Only if there's a clear price pattern before it
+        text = re.sub(r'(\d\.\d{2})\s+[a-zA-Z]\s+([A-Z][a-zA-Z]+)', r'\1\n\2', text)
+        
+        # Remove single characters that appear isolated between spaces
+        # But only if they're clearly artifacts (not valid words)
+        text = re.sub(r'\s+[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]\s+(?=[A-Z])', r' ', text)
+        
+        # Remove sequences of punctuation/symbols that are clearly artifacts
+        text = re.sub(r'\s*[,\.\-\+\*]{2,}\s*', ' ', text)
+        
         return text
     
     def _reconstruct_line_breaks(self, text: str) -> str:
+        # Add line breaks in appropriate places
+        # But be more conservative to avoid breaking valid compound words
+        # Add line breaks after prices to separate items
+        
         patterns = [
-            (r'([a-z])([A-Z]{2,})', r'\1\n\2'),
-            (r'(\d)([A-Z][a-z])', r'\1\n\2'),
-            (r'([a-z])(RECEIPT)', r'\1\n\2'),
-            (r'([a-z])(SALES)', r'\1\n\2'),
-            (r'([a-z])(Qty)', r'\1\n\2'),
-            (r'([a-z])(Item)', r'\1\n\2'),
-            (r'([a-z])(Price)', r'\1\n\2'),
-            (r'([a-z])(Sub)', r'\1\n\2'),
-            (r'([a-z])(Total)', r'\1\n\2'),
-            (r'([a-z])(Line)', r'\1\n\2'),
-            (r'([a-z])(Transaction)', r'\1\n\2'),
-            (r'([a-z])(Discount)', r'\1\n\2'),
-            (r'([a-z])(THANK)', r'\1\n\2'),
-            (r'([a-z])(Admin)', r'\1\n\2'),
+            # Break before receipt keywords that are likely new lines
+            (r'([a-z])(\s*RECEIPT)', r'\1\n\2'),
+            (r'([a-z])(\s*SALES)', r'\1\n\2'),
+            (r'([a-z])(\s*THANK)', r'\1\n\2'),
+            # Break before quantity patterns like "2x Items"
+            (r'([a-z])(\s*\d+x\s*[A-Z])', r'\1\n\2'),
+            # Break AFTER prices (currency amounts and decimal prices)
+            (r'([£$€]\d+\.\d{2})(\s+[A-Z])', r'\1\n\2'),
+            (r'(\d+\.\d{2})(\s+[A-Z][a-zA-Z])', r'\1\n\2'),
+            # Break before dates
+            (r'([a-z])(\s*\d{1,2}/\d{1,2}/\d)', r'\1\n\2'),
+            (r'([a-z])(\s*\d{1,2}-\d{1,2}-\d)', r'\1\n\2'),
+            # Break before times
+            (r'([a-z])(\s*\d{1,2}:\d{2})', r'\1\n\2'),
         ]
+        
         for pattern, replacement in patterns:
             text = re.sub(pattern, replacement, text)
-        text = re.sub(r'([a-z])(\d+x[A-Z])', r'\1\n\2', text)
-        text = re.sub(r'([a-z])([£$€]\d)', r'\1\n\2', text)
-        text = re.sub(r'([a-z])(\d+\.\d{2})', r'\1\n\2', text)
-        text = re.sub(r'([a-z])(\d{1,2}/\d{1,2}/\d)', r'\1\n\2', text)
-        text = re.sub(r'([a-z])(\d{1,2}-\d{1,2}-\d)', r'\1\n\2', text)
-        text = re.sub(r'([a-z])(\d{1,2}:\d{2})', r'\1\n\2', text)
+        
         return text
     
     def _clean_lines(self, text: str) -> str:
         lines = text.split('\n')
         cleaned_lines = []
+        
         for line in lines:
             line = line.strip()
             if not line:
                 continue
+            
+            # Skip lines that are just punctuation/symbols
             if re.match(r'^[,\.\-\+\*\s]+$', line):
                 continue
-            if len(line) < 2:
+            
+            # Skip single character lines unless they're meaningful
+            if len(line) == 1 and line not in ['A', 'I']:
                 continue
+            
+            # Clean up multiple spaces
             line = re.sub(r'\s+', ' ', line)
-            line = re.sub(r'([a-z])([A-Z])', r'\1 \2', line)
-            line = re.sub(r'(\d)([A-Z][a-z])', r'\1 \2', line)
-            line = re.sub(r'([a-z]):([A-Z])', r'\1: \2', line)
+            
+            # Add space before capital letters only in specific contexts
+            # Be more conservative to avoid breaking valid words
+            line = re.sub(r'([a-z])([A-Z][a-z]{2,})', r'\1 \2', line)  # Only break if next part is 3+ chars
+            line = re.sub(r'(\d)([A-Z][a-z]{2,})', r'\1 \2', line)     # Only break if next part is 3+ chars
+            
+            # Fix spacing around colons
+            line = re.sub(r'([a-zA-Z]):([A-Z])', r'\1: \2', line)
+            
             cleaned_lines.append(line)
+        
         return '\n'.join(cleaned_lines)
     
     def _analyze_text_quality(self, text: str) -> Dict:
@@ -196,28 +229,3 @@ class ReceiptPreprocessor:
             'dates_found': dates,
             'quality_score': quality_score
         }
-
-if __name__ == "__main__":
-    preprocessor = ReceiptPreprocessor()
-    test_images = [
-        "../data/sample_receipts/sample_receipt.jpeg",
-        "data/sample_receipts/sample_receipt.jpg"
-    ]
-    
-    for image_path in test_images:
-        if os.path.exists(image_path):
-            print(f"Testing preprocessing on: {image_path}")
-            try:
-                cleaned_text, metrics = preprocessor.process_receipt(image_path)
-                print(f"OCR Method: {metrics['ocr_method']}")
-                print(f"Quality Score: {metrics['quality_score']:.2%}")
-                print(f"Lines: {metrics['lines_count']}")
-                print(f"Money amounts: {metrics['money_amounts']}")
-                print("\nCleaned text:")
-                print("-" * 40)
-                print(cleaned_text[:500] + "..." if len(cleaned_text) > 500 else cleaned_text)
-                break
-            except Exception as e:
-                print(f"Error: {e}")
-    else:
-        print("No test images found")
